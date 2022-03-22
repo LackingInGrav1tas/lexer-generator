@@ -1,7 +1,5 @@
 mod lib;
 
-use regex::Regex;
-
 fn main() {
     let argv: Vec<String> = std::env::args().collect();
     let json: String = std::fs::read_to_string(argv[1].clone()).unwrap();

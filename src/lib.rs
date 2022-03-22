@@ -13,8 +13,7 @@ struct RuleSet { // Parsed rule set from JSON file
     whitespace: String
 }
 
-#[allow(dead_code)]
-pub struct RegexRuleSet { // Converting above into regex
+struct RegexRuleSet { // Converting above into regex
     keywords: Vec<String>,
     literal_regex: HashMap<String, Vec<Regex>>,
     operators: HashMap<String, String>,
@@ -54,8 +53,15 @@ impl RegexRuleSet {
 
 #[derive(Clone)]
 pub struct Token {
-    token_type: String,
-    value: String
+    pub token_type: String,
+    pub value: String,
+    pub line: usize
+}
+
+impl Token {
+    pub fn is(&self, types: Vec<String>) -> bool {
+        types.contains(&self.token_type)
+    }
 }
 
 impl std::fmt::Display for Token {
@@ -64,22 +70,22 @@ impl std::fmt::Display for Token {
     }
 }
 
-#[allow(dead_code)]
 pub struct Lexer {
     source: String,
     last_token: Option<Token>,
     cache: Option<Token>,
     rules: RegexRuleSet,
+    line: usize
 }
 
-#[allow(dead_code)]
 impl Lexer {
     pub fn from(json: String, source: String) -> Self {
         Self {
             source: source,
             last_token: None,
             cache: None,
-            rules: RegexRuleSet::from(json)
+            rules: RegexRuleSet::from(json),
+            line: 0
         }
     }
 
@@ -98,7 +104,12 @@ impl Lexer {
     }
 
     fn get(& mut self) -> char {
-        self.source.remove(0)
+        match self.source.remove(0) {
+            c => {
+                if c == '\n' { self.line += 1; }
+                c
+            }
+        }
     }
 
     fn parse_next(&mut self) -> Option<Token> {
@@ -116,7 +127,8 @@ impl Lexer {
                 return Some(
                     Token {
                         token_type: String::from("operator"),
-                        value: lexeme
+                        value: lexeme,
+                        line: self.line
                     }
                 );
             }
@@ -131,14 +143,16 @@ impl Lexer {
                         Some(
                             Token {
                                 token_type: String::from("keyword"),
-                                value: lexeme
+                                value: lexeme,
+                                line: self.line
                             }
                         )
                     } else {
                         Some(
                             Token {
                                 token_type: literal_type,
-                                value: lexeme
+                                value: lexeme,
+                                line: self.line
                             }
                         )
                     };
@@ -153,7 +167,8 @@ impl Lexer {
                 return Some(
                     Token {
                         token_type: String::from("keyword"),
-                        value: lexeme
+                        value: lexeme,
+                        line: self.line
                     }
                 )
             } else {
