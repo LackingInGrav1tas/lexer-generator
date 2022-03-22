@@ -95,7 +95,7 @@ impl Lexer {
 
     fn skip_whitespace(&mut self) {
         while self.rules.whitespace.is_match(&String::from(self.ch())) {
-            self.source.remove(0);
+            self.get();
         }
     }
 
@@ -179,6 +179,7 @@ impl Lexer {
     }
 
     pub fn next_token(&mut self) -> Option<Token> {
+        // advances and returns the next token
         match self.cache.clone() {
             Some(token) => {
                 self.cache = None;
@@ -192,14 +193,13 @@ impl Lexer {
         }
     }
 
-    pub fn current_token(&self) -> Token {
-        match &self.last_token {
-            Some(t) => t.clone(),
-            None => panic!("no current token")
-        }
+    pub fn current_token(&self) -> Option<Token> {
+        // returns the last token lexed
+        self.last_token.clone()
     }
 
     pub fn peek_next_token(&mut self) -> Option<Token> {
+        // returns the next token to be parsed
         self.cache = self.next_token();
         self.cache.clone()
     }
