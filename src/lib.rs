@@ -1,3 +1,42 @@
+//! # lexer-generator
+//! 
+//! This crate is a small scale lexer package which is parsed from JSON
+//! 
+//! # Example: Basic Tokenizing
+//! 
+//! Potential code one might use for lexing tokens for a calculator
+//! 
+//! ```key.json```:
+//! ```
+//! {
+//!     "keywords": [],
+//!     "literal_regex": {
+//!         "number": ["[0-9]", "[^[0-9]]"]
+//!     },
+//!     "operators": {
+//!         "-": "subtract",
+//!         "+": "add",
+//!         "/": "divide",
+//!         "*": "multiply" 
+//!     },
+//!     "operator_start": "\\+|\\-|\\*|/",
+//!     "operator_halt": "\n| |\r|\t|[0-9]|[a-z]|[A-Z]|_",
+//!     "whitespace": "\n| |\r|\t"
+//! }
+//! ```
+//! ```main.rs```:
+//! ```
+//! let json: String = std::fs::read_to_string("key.json").unwrap();
+//! let source: String = String::from("123 + 456 * 789");
+//! 
+//! let mut lexer = lib::Lexer::from(json, source);
+//! // parsing, runtime, whatever one would want to do with their tokens
+//! ```
+//! 
+//! ```
+//! "123 + 456 * 789" -> Token("number", "123"), Token("add", "*"), Token("number", "456"), Token("multiply", "*"), Token("number", "789") // ignoring line position and the incremental nature of the lexer
+//! ```
+
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
@@ -22,9 +61,9 @@ struct RegexRuleSet { // Converting above into regex
     whitespace: Regex
 }
 
+#[allow(dead_code)]
 impl RegexRuleSet {
-    pub fn from(json: String) -> Self {
-        let ruleset = serde_json::from_str::<RuleSet>(&json).unwrap(); // serde deserializing
+    fn from(ruleset: RuleSet) -> Self {
         Self {
             // list of keywords
             keywords: ruleset.keywords,
@@ -49,16 +88,22 @@ impl RegexRuleSet {
             whitespace: Regex::new(&ruleset.whitespace).unwrap()
         }
     }
+    fn from_string(json: String) -> Self {
+        Self::from(serde_json::from_str::<RuleSet>(&json).unwrap())
+    }
 }
 
 #[derive(Clone)]
+/// Tokens are parsed from source code, their types are defined by the JSON given to the Lexer
 pub struct Token {
     pub token_type: String,
     pub value: String,
     pub line: usize
 }
 
+#[allow(dead_code)]
 impl Token {
+    /// Returns true if token.token_type matches any of the types
     pub fn is(&self, types: Vec<String>) -> bool {
         types.contains(&self.token_type)
     }
@@ -70,6 +115,14 @@ impl std::fmt::Display for Token {
     }
 }
 
+/// Lexes tokens from source code based on JSON-parsed ruleset
+/// # Example: 
+/// ```
+/// let mut lexer = Lexer::from(json, source);
+/// while !lexer.done() {
+///    println!("{}", lexer.next_token().unwrap());
+///}
+///```
 pub struct Lexer {
     source: String,
     last_token: Option<Token>,
@@ -78,13 +131,26 @@ pub struct Lexer {
     line: usize
 }
 
+#[allow(dead_code)]
 impl Lexer {
+    /// Generates a lexer from JSON
     pub fn from(json: String, source: String) -> Self {
         Self {
             source: source,
             last_token: None,
             cache: None,
-            rules: RegexRuleSet::from(json),
+            rules: RegexRuleSet::from_string(json),
+            line: 0
+        }
+    }
+
+    /// Initializes lexer without JSON parsing
+    pub fn from_args(keywords: Vec<String>, literal_regex: HashMap<String, Vec<String>>, operators: HashMap<String, String>, operator_start: String, operator_halt: String, whitespace: String, source: String) -> Self {
+        Self {
+            source: source,
+            last_token: None,
+            cache: None,
+            rules: RegexRuleSet::from(RuleSet { keywords: keywords, literal_regex: literal_regex, operators: operators, operator_start: operator_start, operator_halt: operator_halt, whitespace: whitespace } ),
             line: 0
         }
     }
@@ -178,8 +244,8 @@ impl Lexer {
         None
     }
 
+    /// Advances and returns the next token
     pub fn next_token(&mut self) -> Option<Token> {
-        // advances and returns the next token
         match self.cache.clone() {
             Some(token) => {
                 self.cache = None;
@@ -193,13 +259,13 @@ impl Lexer {
         }
     }
 
+    /// Returns the last token lexed
     pub fn current_token(&self) -> Option<Token> {
-        // returns the last token lexed
         self.last_token.clone()
     }
 
+    /// Returns the next token to be lexed
     pub fn peek_next_token(&mut self) -> Option<Token> {
-        // returns the next token to be parsed
         self.cache = self.next_token();
         self.cache.clone()
     }
