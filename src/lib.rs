@@ -24,7 +24,7 @@
 //! let json: String = std::fs::read_to_string("key.json").unwrap();
 //! let source: String = String::from("123 + 456 * 789");
 //! 
-//! let mut lexer = lib::Lexer::from(json, source);
+//! let mut lexer = Lexer::from(json, source);
 //! // parsing, runtime, whatever one would want to do with their tokens
 //! ```
 //! 
