@@ -4,7 +4,7 @@ Lexer crate derived from Regex patterns with user customizeable tokens
 
 # Example: Basic Tokenizing
 
-Potential code one might use for lexing tokens for a calculator
+Potential code one might use to lex tokens for a calculator
 
 ```key.json```:
 ```
