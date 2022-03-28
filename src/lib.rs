@@ -9,18 +9,13 @@
 //! ```key.json```:
 //! ```
 //! {
-//!     "keywords": [],
-//!     "literal_regex": {
-//!         "number": ["[0-9]", "[^[0-9]]"]
+//!     "literals": {
+//!         "number": "[0-9]*[0-9]",
+//!         "subtract": "-",
+//!         "add": "\\+",
+//!         "divide": "/",
+//!         "multiply": "\\*" 
 //!     },
-//!     "operators": {
-//!         "-": "subtract",
-//!         "+": "add",
-//!         "/": "divide",
-//!         "*": "multiply" 
-//!     },
-//!     "operator_start": "\\+|\\-|\\*|/",
-//!     "operator_halt": "\n| |\r|\t|[0-9]|[a-z]|[A-Z]|_",
 //!     "whitespace": "\n| |\r|\t"
 //! }
 //! ```
@@ -40,24 +35,16 @@
 use serde::{Deserialize, Serialize};
 
 use std::collections::HashMap;
-use regex::Regex;
+use regex::*;
 
 #[derive(Serialize, Deserialize)]
 struct RuleSet { // Parsed rule set from JSON file
-    keywords: Vec<String>,
-    literal_regex: HashMap<String, Vec<String>>,
-    operators: HashMap<String, String>,
-    operator_start: String,
-    operator_halt: String,
+    literals: HashMap<String, String>,
     whitespace: String
 }
 
 struct RegexRuleSet { // Converting above into regex
-    keywords: Vec<String>,
-    literal_regex: HashMap<String, Vec<Regex>>,
-    operators: HashMap<String, String>,
-    operator_start: Regex,
-    operator_halt: Regex,
+    literals: HashMap<String, Regex>,
     whitespace: Regex
 }
 
@@ -65,26 +52,14 @@ struct RegexRuleSet { // Converting above into regex
 impl RegexRuleSet {
     fn from(ruleset: RuleSet) -> Self {
         Self {
-            // list of keywords
-            keywords: ruleset.keywords,
-
-            // list of literal values, "type name" : [ "regex for start", "regex for end" ]
-            literal_regex: {
-                let mut hm: HashMap<String, Vec<Regex>> = HashMap::new();
-                for (k, v) in ruleset.literal_regex {
-                    hm.insert(k, {
-                        let mut vec = vec![];
-                        for pat in v { vec.push(Regex::new(&pat).unwrap()); }
-                        vec
-                    });
+            // list of literal values, operators, keywords, etc., "name" : "regex pattern"
+            literals: {
+                let mut hm: HashMap<String, Regex> = HashMap::new();
+                for (k, v) in ruleset.literals {
+                    hm.insert(k, Regex::new(&v).unwrap());
                 }
                 hm
             },
-            operators: {
-                ruleset.operators
-            },
-            operator_start: Regex::new(&ruleset.operator_start).unwrap(),
-            operator_halt: Regex::new(&ruleset.operator_halt).unwrap(),
             whitespace: Regex::new(&ruleset.whitespace).unwrap()
         }
     }
@@ -131,6 +106,11 @@ pub struct Lexer {
     line: usize
 }
 
+pub enum ParsingError {
+    EndOfFileError,
+    UnrecognizedPatternError(String),
+}
+
 #[allow(dead_code)]
 impl Lexer {
     /// Generates a lexer from JSON
@@ -145,12 +125,12 @@ impl Lexer {
     }
 
     /// Initializes lexer without JSON parsing
-    pub fn from_args(keywords: Vec<String>, literal_regex: HashMap<String, Vec<String>>, operators: HashMap<String, String>, operator_start: String, operator_halt: String, whitespace: String, source: String) -> Self {
+    pub fn from_args(literals: HashMap<String, String>, whitespace: String, source: String) -> Self {
         Self {
             source: source,
             last_token: None,
             cache: None,
-            rules: RegexRuleSet::from(RuleSet { keywords: keywords, literal_regex: literal_regex, operators: operators, operator_start: operator_start, operator_halt: operator_halt, whitespace: whitespace } ),
+            rules: RegexRuleSet::from(RuleSet { literals: literals, whitespace: whitespace } ),
             line: 0
         }
     }
@@ -160,8 +140,14 @@ impl Lexer {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.rules.whitespace.is_match(&String::from(self.ch())) {
-            self.get();
+        let mat = match self.rules.whitespace.find(&self.source) { Some(a) => (a.start() as i32, a.end() as i32), None => (-1, -1)};
+        if mat.0 == 0 {
+            for _i in mat.0..mat.1 {
+                match self.source.remove(0) {
+                    '\n' => self.line += 1,
+                    _ => {}
+                }
+            }
         }
     }
 
@@ -178,70 +164,31 @@ impl Lexer {
         }
     }
 
-    fn parse_next(&mut self) -> Option<Token> {
+    fn parse_next(&mut self) -> Result<Token, ParsingError> {
         self.skip_whitespace();
-        let mut lexeme = String::new();
         if !self.done() {
-            lexeme.push(self.get());
-
-            // lexing operator
-            if self.rules.operator_start.is_match(&lexeme) {
-                while !self.done() && !self.rules.operator_halt.is_match(&String::from(self.ch())) {
-                    lexeme.push(self.get());
-                }
-                self.rules.operators.get(&lexeme).expect(&format!("'{}' is not a valid operator", lexeme));
-                return Some(
-                    Token {
-                        token_type: String::from("operator"),
-                        value: lexeme,
-                        line: self.line
-                    }
-                );
-            }
-
-            // lexing literal
-            for (literal_type, patterns) in self.rules.literal_regex.clone() {
-                if patterns.get(0).unwrap().is_match(&lexeme) { // matches start
-                    while !self.done() && !patterns.get(1).unwrap().is_match(&String::from(self.ch())) { // while it isn't halt
-                        lexeme.push(self.get());
-                    }
-                    return if self.rules.keywords.contains(&lexeme) {
-                        Some(
-                            Token {
-                                token_type: String::from("keyword"),
-                                value: lexeme,
-                                line: self.line
-                            }
-                        )
-                    } else {
-                        Some(
-                            Token {
-                                token_type: literal_type,
-                                value: lexeme,
-                                line: self.line
-                            }
-                        )
-                    };
+            let mut name = String::new();
+            let mut mat: (i32, i32) = (-1, -1);
+            for (lit_type, pat) in &self.rules.literals {
+                let new_mat = match pat.find(&self.source) {
+                    Some(thing) => thing,
+                    None => continue
+                };
+                if new_mat.start() == 0 && new_mat.end() as i32 > mat.1 {
+                    mat = (new_mat.start() as i32, new_mat.end() as i32);
+                    name = lit_type.clone();
                 }
             }
-
-            // something else
-            while !self.done() && !self.rules.whitespace.is_match(&String::from(self.ch())) {
+            if mat.0 != 0 { // no patterns
+                return Err(ParsingError::UnrecognizedPatternError(String::from(self.get())))
+            }
+            let mut lexeme = String::new();
+            for _ in 0..mat.1 {
                 lexeme.push(self.get());
             }
-            if self.rules.keywords.contains(&lexeme) {
-                return Some(
-                    Token {
-                        token_type: String::from("keyword"),
-                        value: lexeme,
-                        line: self.line
-                    }
-                )
-            } else {
-                panic!("{}", format!("no known pattern exists for {}", lexeme))
-            }
+            return Ok(Token { token_type: name, value: lexeme, line: self.line });
         }
-        None
+        Err(ParsingError::EndOfFileError)
     }
 
     /// Advances and returns the next token
@@ -253,7 +200,10 @@ impl Lexer {
                 self.last_token.clone()
             }
             None => {
-                self.last_token = self.parse_next();
+                self.last_token = match self.parse_next() {
+                    Ok(a) => Some(a),
+                    Err(_) => None
+                };
                 self.last_token.clone()
             }
         }
