@@ -43,6 +43,7 @@ struct RuleSet { // Parsed rule set from JSON file
     whitespace: String
 }
 
+#[derive(Clone)]
 struct RegexRuleSet { // Converting above into regex
     literals: HashMap<String, Regex>,
     whitespace: Regex
@@ -90,6 +91,7 @@ impl std::fmt::Display for Token {
     }
 }
 
+#[derive(Clone)]
 /// Lexes tokens from source code based on JSON-parsed ruleset
 /// # Example: 
 /// ```
@@ -98,14 +100,16 @@ impl std::fmt::Display for Token {
 ///    println!("{}", lexer.next_token().unwrap());
 ///}
 ///```
+///
 pub struct Lexer {
     source: String,
-    last_token: Option<Token>,
-    cache: Option<Token>,
+    last_token: Option<Result<Token, ParsingError>>,
+    cache: Option<Result<Token, ParsingError>>,
     rules: RegexRuleSet,
     line: usize
 }
 
+#[derive(Clone, Debug)]
 pub enum ParsingError {
     EndOfFileError,
     UnrecognizedPatternError(String),
@@ -192,31 +196,28 @@ impl Lexer {
     }
 
     /// Advances and returns the next token
-    pub fn next_token(&mut self) -> Option<Token> {
+    pub fn next_token(&mut self) -> Result<Token, ParsingError> {
         match self.cache.clone() {
             Some(token) => {
                 self.cache = None;
                 self.last_token = Some(token);
-                self.last_token.clone()
+                self.last_token.clone().unwrap()
             }
             None => {
-                self.last_token = match self.parse_next() {
-                    Ok(a) => Some(a),
-                    Err(_) => None
-                };
-                self.last_token.clone()
+                self.last_token = Some(self.parse_next());
+                self.last_token.clone().unwrap()
             }
         }
     }
 
     /// Returns the last token lexed
-    pub fn current_token(&self) -> Option<Token> {
+    pub fn current_token(&self) -> Option<Result<Token, ParsingError>> {
         self.last_token.clone()
     }
 
     /// Returns the next token to be lexed
-    pub fn peek_next_token(&mut self) -> Option<Token> {
-        self.cache = self.next_token();
+    pub fn peek_next_token(&mut self) -> Option<Result<Token, ParsingError>> {
+        self.cache = Some(self.next_token());
         self.cache.clone()
     }
 }
