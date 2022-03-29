@@ -70,7 +70,7 @@ impl RegexRuleSet {
 }
 
 #[derive(Clone)]
-/// Tokens are parsed from source code, their types are defined by the JSON given to the Lexer
+/// Tokens are parsed from source code, their types are defined by the Lexer's ruleset
 pub struct Token {
     pub token_type: String,
     pub value: String,
@@ -80,8 +80,14 @@ pub struct Token {
 #[allow(dead_code)]
 impl Token {
     /// Returns true if token.token_type matches any of the types
-    pub fn is(&self, types: Vec<String>) -> bool {
-        types.contains(&self.token_type)
+    pub fn is<T: ToString>(&self, types: Vec<T>) -> bool {
+        {
+            let mut v = vec![];
+            for t in types {
+                v.push(t.to_string());
+            }
+            v
+        }.contains(&self.token_type)
     }
 }
 
