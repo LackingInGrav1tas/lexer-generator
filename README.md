@@ -10,7 +10,7 @@ Potential code one might use to lex tokens for a calculator
 ```
 {
     "literals": {
-        "number": "[0-9]*[0-9]",
+        "number": "[0-9]*(\\.[0-9]*){0, 1}",
         "subtract": "-",
         "add": "\\+",
         "divide": "/",

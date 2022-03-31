@@ -10,7 +10,7 @@
 //! ```
 //! {
 //!     "literals": {
-//!         "number": "[0-9]*[0-9]",
+//!         "number": "[0-9]*(\\.[0-9]*){0, 1}",
 //!         "subtract": "-",
 //!         "add": "\\+",
 //!         "divide": "/",
@@ -216,14 +216,29 @@ impl Lexer {
         }
     }
 
+    /// Advances and returns the next token
+    pub fn next_token_x(& mut self) -> Token {
+        self.next_token().unwrap()
+    }
+
     /// Returns the last token lexed
     pub fn current_token(&self) -> Option<Result<Token, ParsingError>> {
         self.last_token.clone()
+    }
+    
+    /// Returns the last token lexed, can throw exceptions
+    pub fn current_token_x(&self) -> Token {
+        self.current_token().unwrap().unwrap()
     }
 
     /// Returns the next token to be lexed
     pub fn peek_next_token(&mut self) -> Option<Result<Token, ParsingError>> {
         self.cache = Some(self.next_token());
         self.cache.clone()
+    }
+
+    /// Returns the next token to be lexed. can throw exceptions
+    pub fn peek_next_token_x(&mut self) -> Token {
+        self.peek_next_token().unwrap().unwrap()
     }
 }
