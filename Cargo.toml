@@ -1,6 +1,6 @@
 [package]
 name = "lexer-generator"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2021"
 description = "Lexer derived from Regex patterns with user customizeable tokens"
 license = "MIT"
